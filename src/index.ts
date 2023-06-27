@@ -1,2 +1,2 @@
-export { apiFetch } from "./fetch";
-export { apiValidate } from "./validate";
+export { apiFetch } from "./fetch.js";
+export { apiValidate } from "./validate.js";

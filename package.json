@@ -1,7 +1,7 @@
 {
     "name": "sveltekit-api-fetch",
-    "version": "0.3.0",
-    "author": "Laurent Stéphenne  <laurent@guibi.ca>",
+    "version": "1.0.0",
+    "author": "Laurent Stéphenne <laurent@guibi.ca>",
     "description": "Adding type safety to SvelteKit's server endpoints.",
     "keywords": [
         "sveltekit",
@@ -21,21 +21,31 @@
     "files": [
         "dist"
     ],
+    "main": "./dist/index.js",
+    "svelte": "./dist/index.js",
+    "types": "./dist/index.d.ts",
     "exports": {
-        "./package.json": "./package.json",
         ".": {
             "types": "./dist/index.d.ts",
-            "import": "./dist/index.js",
-            "svelte": "./dist/index.js"
+            "svelte": "./dist/index.js",
+            "import": "./dist/index.js"
         },
         "./vite": {
             "types": "./dist/vite/index.d.ts",
-            "import": "./dist/vite/index.js",
-            "svelte": "./dist/vite/index.js"
+            "svelte": "./dist/vite/index.js",
+            "import": "./dist/vite/index.js"
         }
     },
-    "svelte": "./dist/index.js",
-    "types": "./dist/index.d.ts",
+    "typesVersions": {
+        ">4.0": {
+            "index.d.ts": [
+                "./dist/index.d.ts"
+            ],
+            "vite": [
+                "./dist/vite/index.d.ts"
+            ]
+        }
+    },
     "peerDependencies": {
         "@sveltejs/kit": "1.x",
         "svelte": "^3.55.0 || ^4.0.0-next.0 || ^4.0.0",
@@ -53,6 +63,7 @@
         "zod": "^3.21.4"
     },
     "type": "module",
+    "packageManager": "pnpm@8.5.1+",
     "scripts": {
         "build": "tsc",
         "lint": "prettier --plugin-search-dir . --check . && eslint .",

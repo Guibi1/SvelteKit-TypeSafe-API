@@ -1,6 +1,6 @@
 import type { RequestEvent } from "@sveltejs/kit";
 import type { z } from "zod";
-import { createApiFetch } from "./fetch";
+import { createApiFetch } from "./fetch.js";
 
 export async function apiValidate(data: object, schema: z.AnyZodObject, f?: typeof fetch) {
     const json = await parseRequestData(data);
