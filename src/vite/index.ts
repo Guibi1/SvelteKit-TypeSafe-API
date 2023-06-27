@@ -1,0 +1,1 @@
+export { apiFetch } from "./plugin";
