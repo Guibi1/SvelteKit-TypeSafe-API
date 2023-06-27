@@ -1,0 +1,10 @@
+{
+    "useTabs": false,
+    "tabWidth": 4,
+    "singleQuote": false,
+    "trailingComma": "es5",
+    "printWidth": 100,
+    "quoteProps": "consistent",
+    "plugins": ["prettier-plugin-organize-imports"],
+    "pluginSearchDirs": ["."]
+}
