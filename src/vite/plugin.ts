@@ -32,11 +32,11 @@ export function apiFetch(): Plugin {
                 if (exportedNode.type === "VariableDeclaration") {
                     for (const variable of exportedNode.declarations) {
                         if (methods.includes(variable.id.name)) {
-                            endpoints[variable.id.name as Method] = "never";
+                            endpoints[variable.id.name as Method] = "null";
                         }
                     }
                 } else if (exportedNode.type === "FunctionDeclaration" && methods.includes(exportedNode.id.name)) {
-                    endpoints[exportedNode.id.name as Method] = "never";
+                    endpoints[exportedNode.id.name as Method] = "null";
                 }
             },
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,18 +65,18 @@ export function apiFetch(): Plugin {
         });
 
         await Promise.allSettled(promises);
-        allowedUrls[apiUrl.replace("\\", "/")] = endpoints;
+        allowedUrls[apiUrl.replaceAll("\\", "/")] = endpoints;
     }
 
     async function save() {
-        const content = `type AllowedUrls = {${Object.entries(allowedUrls)
+        const content = `type AllowedUrls = {\n${Object.entries(allowedUrls)
             .map(([url, endpoints]) => {
-                return `"${url}": { ${Object.entries(endpoints)
-                    .map(([method, v]) => `"${method}": ${v}`)
-                    .join(", ")} }`;
+                return `    "${url}": {\n${Object.entries(endpoints)
+                    .map(([method, v]) => `        "${method}": ${v}`)
+                    .join(", \n")}\n    }`;
             })
-            .join(", ")}}`;
-        const filePath = path.join(projectPath, "/.svelte-kit/types/$types.d.ts");
+            .join(",\n")}\n}`;
+        const filePath = path.join(projectPath, "src/api.d.ts");
 
         await writeFile(filePath, content);
     }

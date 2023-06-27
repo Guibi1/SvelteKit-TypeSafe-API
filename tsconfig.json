@@ -1,14 +1,17 @@
 {
     "compilerOptions": {
-        "allowJs": true,
-        "checkJs": true,
+        "target": "esnext",
+        "module": "esnext",
+        "moduleResolution": "node",
         "esModuleInterop": true,
-        "forceConsistentCasingInFileNames": true,
-        "resolveJsonModule": true,
-        "skipLibCheck": true,
-        "sourceMap": true,
         "strict": true,
+        "sourceMap": true,
+        "declaration": true,
         "outDir": "dist",
-        "declaration": true
-    }
+        "declarationDir": "dist",
+        "baseUrl": ".",
+        "lib": ["esnext", "DOM", "DOM.Iterable"]
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["node_modules", "dist"]
 }
