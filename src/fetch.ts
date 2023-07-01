@@ -2,7 +2,10 @@ type EndpointUrls = keyof AllowedUrls;
 
 type AllowedMethods<Info extends EndpointUrls> = keyof AllowedUrls[Info];
 
-type AllowedBody<Info extends EndpointUrls, Method extends keyof AllowedUrls[Info]> = AllowedUrls[Info][Method];
+type AllowedBody<
+    Info extends EndpointUrls,
+    Method extends keyof AllowedUrls[Info]
+> = AllowedUrls[Info][Method];
 
 export function createApiFetch(f: typeof fetch) {
     return function <Info extends EndpointUrls, Method extends AllowedMethods<Info>>(
@@ -12,7 +15,15 @@ export function createApiFetch(f: typeof fetch) {
         },
         body: AllowedBody<Info, Method>
     ): Promise<Response> {
-        return f(input, { ...init, body: body ? JSON.stringify(body) : undefined });
+        return f(input, {
+            ...init,
+            header: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                ...init.header,
+            },
+            body: body ? JSON.stringify(body) : undefined,
+        });
     };
 }
 

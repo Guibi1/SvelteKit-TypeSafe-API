@@ -35,17 +35,23 @@ export function apiFetch(): Plugin {
                             endpoints[variable.id.name as Method] = "null";
                         }
                     }
-                } else if (exportedNode.type === "FunctionDeclaration" && methods.includes(exportedNode.id.name)) {
+                } else if (
+                    exportedNode.type === "FunctionDeclaration" &&
+                    methods.includes(exportedNode.id.name)
+                ) {
                     endpoints[exportedNode.id.name as Method] = "null";
                 }
             },
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             VariableDeclarator(node: any) {
                 const variable = node.init;
+
                 if (
                     variable &&
                     variable.type === "CallExpression" &&
+                    variable.callee.object &&
                     variable.callee.object.name === "z" &&
+                    variable.arguments &&
                     variable.arguments.length > 0 &&
                     variable.arguments[0].type === "ObjectExpression"
                 ) {
@@ -59,7 +65,12 @@ export function apiFetch(): Plugin {
                                 return ${code.slice(variable.start, variable.end)};
                             })`;
 
-                    promises.push((0, eval)(declaration).then((schema: z.ZodTypeAny) => (endpoints[method as Method] = anyZodToType(schema))));
+                    promises.push(
+                        (0, eval)(declaration).then(
+                            (schema: z.ZodTypeAny) =>
+                                (endpoints[method as Method] = anyZodToType(schema))
+                        )
+                    );
                 }
             },
         });
@@ -86,14 +97,21 @@ export function apiFetch(): Plugin {
 
         async configureServer(s) {
             projectPath = s.config.root;
-            serverEndpointPathRegex = RegExp(`^(?:${projectPath}/)?src/routes(/.*)?/\\+server\\.(ts|js)$`);
+            serverEndpointPathRegex = RegExp(
+                `^(?:${projectPath}/)?src/routes(/.*)?/\\+server\\.(ts|js)$`
+            );
 
             const serverFiles = glob.sync("src/routes/**/+server.ts", { cwd: projectPath });
             if (serverFiles.length === 0) return;
 
             const promises: Promise<void>[] = [];
             for (const filePath of serverFiles) {
-                promises.push(parseFile(filePath.substring(10, filePath.length - 11), await readFile(filePath, { encoding: "utf8" })));
+                promises.push(
+                    parseFile(
+                        filePath.substring(10, filePath.length - 11),
+                        await readFile(filePath, { encoding: "utf8" })
+                    )
+                );
             }
 
             await Promise.allSettled(promises);
