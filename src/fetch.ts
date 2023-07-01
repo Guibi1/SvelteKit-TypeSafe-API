@@ -17,10 +17,10 @@ export function createApiFetch(f: typeof fetch) {
     ): Promise<Response> {
         return f(input, {
             ...init,
-            header: {
+            headers: {
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                ...init.header,
+                ...init.headers,
             },
             body: body ? JSON.stringify(body) : undefined,
         });
