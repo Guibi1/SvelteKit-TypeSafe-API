@@ -1,16 +1,15 @@
 {
     "compilerOptions": {
-        "target": "esnext",
-        "module": "esnext",
-        "moduleResolution": "node",
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "Node",
         "esModuleInterop": true,
         "strict": true,
         "sourceMap": true,
         "declaration": true,
+        "declarationMap": true,
         "outDir": "dist",
-        "declarationDir": "dist",
-        "baseUrl": ".",
-        "lib": ["esnext", "DOM", "DOM.Iterable"]
+        "lib": ["ESNext", "DOM", "DOM.Iterable"]
     },
     "include": ["src/**/*.ts"],
     "exclude": ["node_modules", "dist"]
