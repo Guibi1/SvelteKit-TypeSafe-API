@@ -43,12 +43,11 @@
         "./package.json": "./package.json"
     },
     "peerDependencies": {
-        "@sveltejs/kit": "1.x",
+        "@sveltejs/kit": "^1.22.0",
         "svelte": "^3.55.0 || ^4.0.0-next.0 || ^4.0.0",
         "zod": "3.x"
     },
     "devDependencies": {
-        "@sveltejs/kit": "^1.22.0",
         "@types/node": "^20.3.3",
         "prettier": "^3.0.0",
         "prettier-plugin-organize-imports": "^3.2.2",
