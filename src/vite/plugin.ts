@@ -87,7 +87,7 @@ export function apiFetch(): Plugin {
         await Promise.allSettled(promises);
 
         allowedUrls[apiUrl.replaceAll("\\", "/")] = endpoints
-            .map((method) => `        ${method}: ${schemas[method] ?? "never"}`)
+            .map((method) => `        ${method}: ${schemas[method] ?? "null"}`)
             .join(";\n");
     }
 
@@ -161,7 +161,7 @@ function anyZodToType(zod: z.ZodTypeAny): string {
         });
 
         if (typeString.length === 0) {
-            return "never";
+            return "Record<string, never>";
         }
 
         return `{ ${typeString.join("; ")} }`;
