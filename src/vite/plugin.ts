@@ -1,15 +1,14 @@
-import { parse } from "acorn";
-import { simple } from "acorn-walk";
 import { readFile, writeFile } from "fs/promises";
 import * as glob from "glob";
 import path from "path";
+import ts from "typescript";
 import type { Plugin } from "vite";
 import { z } from "zod";
 
 const methods = ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"];
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE" | "OPTIONS";
 type EndpointData = Partial<Record<Method, string>>;
-type AllowedUrls = { [key: string]: EndpointData };
+type AllowedUrls = { [key: string]: string };
 
 export function apiFetch(): Plugin {
     let projectPath = "";
@@ -17,76 +16,88 @@ export function apiFetch(): Plugin {
     const allowedUrls: AllowedUrls = {};
 
     async function parseFile(apiUrl: string, code: string) {
-        const endpoints: EndpointData = {};
+        const endpoints: Method[] = [];
+        const schemas: EndpointData = {};
         const promises: Promise<void>[] = [];
 
-        const ast = parse(code, {
-            ecmaVersion: "latest",
-            sourceType: "module",
-        });
+        const ast = ts.createSourceFile(apiUrl, code, ts.ScriptTarget.ESNext);
+        ast.forEachChild((node) => {
+            if (!ts.canHaveModifiers(node)) return;
 
-        simple(ast, {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ExportNamedDeclaration(node: any) {
-                const exportedNode = node.declaration;
-                if (exportedNode.type === "VariableDeclaration") {
-                    for (const variable of exportedNode.declarations) {
-                        if (methods.includes(variable.id.name)) {
-                            endpoints[variable.id.name as Method] = "null";
-                        }
+            const isExported =
+                node.modifiers?.some((mod) => mod.kind === ts.SyntaxKind.ExportKeyword) ?? false;
+
+            if (ts.isVariableStatement(node)) {
+                node.declarationList.declarations.forEach((declaration) => {
+                    if (!ts.isIdentifier(declaration.name)) {
+                        console.error("no name");
+                        return;
                     }
-                } else if (
-                    exportedNode.type === "FunctionDeclaration" &&
-                    methods.includes(exportedNode.id.name)
-                ) {
-                    endpoints[exportedNode.id.name as Method] = "null";
-                }
-            },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            VariableDeclarator(node: any) {
-                const variable = node.init;
 
-                if (
-                    variable &&
-                    variable.type === "CallExpression" &&
-                    variable.callee.object &&
-                    variable.callee.object.name === "z" &&
-                    variable.arguments &&
-                    variable.arguments.length > 0 &&
-                    variable.arguments[0].type === "ObjectExpression"
-                ) {
-                    const nameMatch = /^_(.*)Schema$/.exec(node.id.name);
-                    if (!nameMatch) return;
+                    // Handle exported endpoint (ex. export const POST = ...)
+                    else if (
+                        isExported &&
+                        methods.includes(declaration.name.escapedText as string)
+                    ) {
+                        endpoints.push(declaration.name.escapedText as Method);
+                    }
 
-                    const method = nameMatch[1].toUpperCase();
-                    if (!methods.includes(method) || method === "GET") return;
+                    // Handle schema declaration (ex. const _postSchema = ...)
+                    else if (
+                        declaration.initializer &&
+                        ts.isCallExpression(declaration.initializer) &&
+                        ts.isPropertyAccessExpression(declaration.initializer.expression) &&
+                        ts.isIdentifier(declaration.initializer.expression.expression) &&
+                        declaration.initializer.expression.expression.escapedText === "z" &&
+                        declaration.initializer.arguments.length > 0 &&
+                        ts.isObjectLiteralExpression(declaration.initializer.arguments[0])
+                    ) {
+                        const nameMatch = /^_(.*)Schema$/.exec(
+                            declaration.name.escapedText as string
+                        );
+                        if (!nameMatch) return;
 
-                    const declaration = `import('zod').then(({z}) => {
-                                return ${code.slice(variable.start, variable.end)};
+                        const method = nameMatch[1].toUpperCase();
+                        if (!methods.includes(method) || method === "GET") return;
+
+                        const UNSAFECODE = `import('zod').then(({z}) => {
+                                return ${code.slice(declaration.pos, declaration.end)};
                             })`;
 
-                    promises.push(
-                        (0, eval)(declaration).then(
-                            (schema: z.ZodTypeAny) =>
-                                (endpoints[method as Method] = anyZodToType(schema))
-                        )
-                    );
+                        promises.push(
+                            (0, eval)(UNSAFECODE).then(
+                                (schema: z.ZodTypeAny) =>
+                                    (schemas[method as Method] = anyZodToType(schema))
+                            )
+                        );
+                    }
+                });
+            } else if (ts.isFunctionDeclaration(node)) {
+                if (!node.name || !ts.isIdentifier(node.name)) {
+                    console.error("no name");
+                    return;
                 }
-            },
+
+                if (isExported && methods.includes(node.name.escapedText as string)) {
+                    endpoints.push(node.name.escapedText as Method);
+                }
+            }
         });
 
         await Promise.allSettled(promises);
-        allowedUrls[apiUrl.replaceAll("\\", "/")] = endpoints;
+
+        allowedUrls[apiUrl.replaceAll("\\", "/")] = endpoints
+            .map((method) => `        ${method}: ${schemas[method] ?? "never"}`)
+            .join(";\n");
     }
 
     async function save() {
-        const content = `type AllowedUrls = {\n${Object.entries(allowedUrls)
+        const content = `${typeFileMessage}\ntype AllowedUrls = {\n${Object.entries(allowedUrls)
             .map(([url, endpoints]) => {
-                return `    "${url}": {\n${Object.entries(endpoints)
-                    .map(([method, v]) => `        "${method}": ${v}`)
-                    .join(", \n")}\n    }`;
+                return `    "${url}": {\n${endpoints};\n    }`;
             })
-            .join(",\n")}\n}`;
+            .join(";\n")};\n};\n`;
+
         const filePath = path.join(projectPath, "src/api.d.ts");
 
         await writeFile(filePath, content);
@@ -148,10 +159,21 @@ function anyZodToType(zod: z.ZodTypeAny): string {
 
             return `${key}${optionalSuffix}: ${type}`;
         });
-        return `{ ${typeString.join(", ")} }`;
+
+        if (typeString.length === 0) {
+            return "never";
+        }
+
+        return `{ ${typeString.join("; ")} }`;
     } else if (zod instanceof z.ZodNull) {
         return "null";
     }
 
     return "undefined";
 }
+
+const typeFileMessage = `/**
+ * This file is generated by sveltekit-api-fetch.
+ * Do not edit it, as it will be overwritten.
+ * Learn more here: https://github.com/Guibi1/sveltekit-api-fetch
+ */\n`;

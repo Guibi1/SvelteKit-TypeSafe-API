@@ -48,18 +48,16 @@
         "zod": "3.x"
     },
     "devDependencies": {
-        "@sveltejs/kit": "^1.21.0",
+        "@sveltejs/kit": "^1.22.0",
         "@types/node": "^20.3.3",
-        "prettier": "^2.8.8",
+        "prettier": "^3.0.0",
         "prettier-plugin-organize-imports": "^3.2.2",
-        "typescript": "^5.1.6",
-        "vite": "^4.3.9",
-        "zod": "^3.21.4"
+        "vite": "^4.3.9"
     },
     "dependencies": {
-        "acorn": "^8.9.0",
-        "acorn-walk": "^8.2.0",
-        "glob": "^10.3.1"
+        "glob": "^10.3.1",
+        "typescript": "^5.1.6",
+        "zod": "^3.21.4"
     },
     "type": "module",
     "packageManager": "pnpm@8.5.1+",
