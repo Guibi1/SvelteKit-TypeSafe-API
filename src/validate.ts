@@ -1,12 +1,16 @@
-import type { RequestEvent } from "@sveltejs/kit";
-import type { z } from "zod";
-import { createApiFetch } from "./fetch.js";
+import { error, type RequestEvent } from "@sveltejs/kit";
+import { z } from "zod";
+import { createApiObject } from "./fetch.js";
 
-export async function apiValidate(data: object, schema: z.AnyZodObject, f?: typeof fetch) {
+export async function apiValidate<T extends z.ZodType>(data: object, schema: T, f?: typeof fetch) {
     const json = await parseRequestData(data);
-    const parse = schema.safeParse(json);
+    const parse = schema.safeParse(json) as z.SafeParseReturnType<T["_input"], T["_output"]>;
 
-    return { parse, apiFetch: createApiFetch(f ?? fetch) };
+    if (!parse.success) {
+        throw error(400, "Invalid data: " + parse.error.message);
+    }
+
+    return { data: parse.data, apiFetch: createApiObject(f ?? fetch) };
 }
 
 async function parseRequestData(data: RequestEvent | Request | object) {
