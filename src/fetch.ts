@@ -1,30 +1,45 @@
-type EndpointUrls = keyof AllowedUrls;
+type AllowedMethod = keyof ProjectAPI;
+type AllowedUrl<M extends AllowedMethod> = keyof ProjectAPI[M];
+type AllowedBody<M extends AllowedMethod, U extends AllowedUrl<M>> = ProjectAPI[M][U];
 
-type AllowedMethods<Info extends EndpointUrls> = keyof AllowedUrls[Info];
+type Init = Omit<RequestInit, "body" | "method">;
 
-type AllowedBody<
-    Info extends EndpointUrls,
-    Method extends keyof AllowedUrls[Info]
-> = AllowedUrls[Info][Method];
-
-export function createApiFetch(f: typeof fetch) {
-    return function <Info extends EndpointUrls, Method extends AllowedMethods<Info>>(
-        input: Info,
-        init: Omit<RequestInit, "body"> & {
-            method: Method;
-        },
-        body: AllowedBody<Info, Method>
+export function createApiObject(f: typeof fetch) {
+    const apiFetch = function <M extends AllowedMethod, U extends AllowedUrl<M>>(
+        method: M,
+        input: U,
+        body: AllowedBody<M, U>,
+        init?: Init
     ): Promise<Response> {
-        return f(input, {
+        return f(input as string, {
             ...init,
             headers: {
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                ...init.headers,
+                ...(init ? init.headers : {}),
+                method,
             },
             body: body ? JSON.stringify(body) : undefined,
         });
     };
+
+    function createRequest<M extends AllowedMethod>(method: M) {
+        return <MM extends M, U extends AllowedUrl<MM>>(
+            url: U,
+            json: AllowedBody<MM, U>,
+            headers?: Init
+        ) => apiFetch(method, url as AllowedUrl<M>, json as AllowedBody<M, AllowedUrl<M>>, headers);
+    }
+
+    return {
+        GET: (url: AllowedUrl<"GET">, headers?: Init) =>
+            apiFetch("GET", url, undefined as never, headers),
+        POST: createRequest("POST"),
+        PATCH: createRequest("PATCH"),
+        PUT: createRequest("PUT"),
+        DELETE: createRequest("DELETE"),
+        OPTIONS: createRequest("OPTIONS"),
+    };
 }
 
-export const apiFetch = createApiFetch(fetch);
+export const api = createApiObject(fetch);

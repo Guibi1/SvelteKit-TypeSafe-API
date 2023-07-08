@@ -8,15 +8,22 @@ import { z } from "zod";
 const methods = ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"];
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE" | "OPTIONS";
 type EndpointData = Partial<Record<Method, string>>;
-type AllowedUrls = { [key: string]: string };
+type ProjectAPI = Record<Method, Record<string, string>>;
 
 export function apiFetch(): Plugin {
     let projectPath = "";
     let serverEndpointPathRegex = RegExp("");
-    const allowedUrls: AllowedUrls = {};
+    const projectAPI: ProjectAPI = {
+        GET: {},
+        POST: {},
+        PATCH: {},
+        PUT: {},
+        DELETE: {},
+        OPTIONS: {},
+    };
 
     async function parseFile(apiUrl: string, code: string) {
-        const endpoints: Method[] = [];
+        const endpointsFound: Method[] = [];
         const schemas: EndpointData = {};
         const promises: Promise<void>[] = [];
 
@@ -24,8 +31,9 @@ export function apiFetch(): Plugin {
         ast.forEachChild((node) => {
             if (!ts.canHaveModifiers(node)) return;
 
-            const isExported =
-                node.modifiers?.some((mod) => mod.kind === ts.SyntaxKind.ExportKeyword) ?? false;
+            const isExported = node.modifiers?.some(
+                (mod) => mod.kind === ts.SyntaxKind.ExportKeyword
+            );
 
             if (ts.isVariableStatement(node)) {
                 node.declarationList.declarations.forEach((declaration) => {
@@ -39,7 +47,7 @@ export function apiFetch(): Plugin {
                         isExported &&
                         methods.includes(declaration.name.escapedText as string)
                     ) {
-                        endpoints.push(declaration.name.escapedText as Method);
+                        endpointsFound.push(declaration.name.escapedText as Method);
                     }
 
                     // Handle schema declaration (ex. const _postSchema = ...)
@@ -79,28 +87,37 @@ export function apiFetch(): Plugin {
                 }
 
                 if (isExported && methods.includes(node.name.escapedText as string)) {
-                    endpoints.push(node.name.escapedText as Method);
+                    endpointsFound.push(node.name.escapedText as Method);
                 }
             }
         });
 
         await Promise.allSettled(promises);
 
-        allowedUrls[apiUrl.replaceAll("\\", "/")] = endpoints
-            .map((method) => `        ${method}: ${schemas[method] ?? "null"}`)
-            .join(";\n");
+        for (const method of endpointsFound) {
+            projectAPI[method][apiUrl.replaceAll("\\", "/")] = schemas[method] ?? "never";
+        }
     }
 
     async function save() {
-        const content = `${typeFileMessage}\ntype AllowedUrls = {\n${Object.entries(allowedUrls)
-            .map(([url, endpoints]) => {
-                return `    "${url}": {\n${endpoints};\n    }`;
-            })
-            .join(";\n")};\n};\n`;
+        const projectMethods = methods.filter((m) => Object.keys(projectAPI[m as Method]).length);
+
+        const fileContent = `${typeFileMessage}\ntype ProjectAPI = ${
+            projectMethods.length === 0
+                ? "object"
+                : `{\n${projectMethods
+                      .map(
+                          (method) =>
+                              `    ${method}: {\n${Object.entries(projectAPI[method as Method])
+                                  .map(([url, type]) => `        "${url}": ${type}`)
+                                  .join(";\n")};\n    }`
+                      )
+                      .join(";\n")};\n}`
+        };\n`;
 
         const filePath = path.join(projectPath, "src/api.d.ts");
 
-        await writeFile(filePath, content);
+        await writeFile(filePath, fileContent);
     }
 
     return {
@@ -113,7 +130,6 @@ export function apiFetch(): Plugin {
             );
 
             const serverFiles = glob.sync("src/routes/**/+server.ts", { cwd: projectPath });
-            if (serverFiles.length === 0) return;
 
             const promises: Promise<void>[] = [];
             for (const filePath of serverFiles) {
