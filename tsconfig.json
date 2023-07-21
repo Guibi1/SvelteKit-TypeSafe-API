@@ -5,9 +5,7 @@
         "moduleResolution": "Node",
         "esModuleInterop": true,
         "strict": true,
-        "sourceMap": true,
         "declaration": true,
-        "declarationMap": true,
         "outDir": "dist",
         "lib": ["ESNext", "DOM", "DOM.Iterable"]
     },
