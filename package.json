@@ -1,6 +1,6 @@
 {
     "name": "sveltekit-api-fetch",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "author": "Laurent Stéphenne <laurent@guibi.ca>",
     "description": "Adding type safety to SvelteKit's server endpoints.",
     "keywords": [
