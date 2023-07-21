@@ -17,8 +17,8 @@ export function createApiObject(f: typeof fetch) {
                 "Content-Type": "application/json",
                 "Accept": "application/json",
                 ...(init ? init.headers : {}),
-                method,
             },
+            method,
             body: body ? JSON.stringify(body) : undefined,
         });
     };
