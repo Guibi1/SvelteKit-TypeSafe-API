@@ -6,14 +6,14 @@ Making SvelteKit **fetch** and **validation** of server endpoints easier than ev
 
 -   Type safe `fetch` functions to create a better coding experience.
 -   Usage of the powerful `zod` library to parse the incomming data.
--   Zero `KB` shipped to the client.
+-   Plug and play and opt-in structure.
 
 ## Installation
 
 Install the package with your favorite NodeJs package manager.
 
 ```sh
-npm i -D sveltekit-api-fetch zod
+npm i sveltekit-api-fetch zod
 ```
 
 ## Get started
@@ -61,7 +61,7 @@ Follow these 3 simple steps to harnest the power of `zod` and `TypeScript` in yo
     ```ts
     import { api } from "sveltekit-api-fetch";
 
-    api.POST("/api", { email: "laurent@guibi.ca", password: "******" });
+    const res = api.POST("/api", { email: "laurent@guibi.ca", password: "******" });
     ```
 
 ## Contributing

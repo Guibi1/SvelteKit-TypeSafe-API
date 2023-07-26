@@ -1,9 +1,7 @@
-import { readFile, writeFile } from "fs/promises";
-import * as glob from "glob";
+import { writeFile } from "fs/promises";
 import path from "path";
 import ts from "typescript";
 import type { Plugin } from "vite";
-import { z } from "zod";
 
 const methods = ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"];
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE" | "OPTIONS";
@@ -13,6 +11,12 @@ type ProjectAPI = Record<Method, Record<string, string>>;
 export function apiFetch(): Plugin {
     let projectPath = "";
     let serverEndpointPathRegex = RegExp("");
+
+    let watch: ts.WatchOfConfigFile<ts.SemanticDiagnosticsBuilderProgram>;
+    let program: ts.Program;
+    let hotUpdateFiles: string[] = [];
+    let hotUpdateTimeout: NodeJS.Timeout;
+
     const projectAPI: ProjectAPI = {
         GET: {},
         POST: {},
@@ -22,13 +26,60 @@ export function apiFetch(): Plugin {
         OPTIONS: {},
     };
 
-    async function parseFile(apiUrl: string, code: string) {
+    function watchProject() {
+        const configPath = ts.findConfigFile("./", ts.sys.fileExists, "tsconfig.json");
+        if (!configPath) {
+            throw new Error("Could not find a valid 'tsconfig.json'.");
+        }
+
+        const host = ts.createWatchCompilerHost(
+            configPath,
+            { noEmit: true, checkJs: false, skipLibCheck: true },
+            ts.sys,
+            ts.createSemanticDiagnosticsBuilderProgram,
+            () => {},
+            () => {}
+        );
+
+        host.afterProgramCreate = (b) => (program = b.getProgram());
+
+        watch = ts.createWatchProgram(host);
+    }
+
+    function parseProject(hotUpdateFiles?: string[]) {
+        const sourceFiles = program.getSourceFiles();
+        const typeChecker = program.getTypeChecker();
+        const routesPath = path.join(projectPath, "src/routes");
+
+        if (hotUpdateFiles) {
+            for (const file of hotUpdateFiles) {
+                const sourceFile = program.getSourceFile(file);
+                if (!sourceFile) continue;
+
+                parseFile(
+                    "/" + path.dirname(path.relative(routesPath, sourceFile.fileName)),
+                    sourceFile,
+                    typeChecker
+                );
+            }
+        } else {
+            for (const sourceFile of sourceFiles) {
+                if (serverEndpointPathRegex.test(sourceFile.fileName)) {
+                    parseFile(
+                        "/" + path.dirname(path.relative(routesPath, sourceFile.fileName)),
+                        sourceFile,
+                        typeChecker
+                    );
+                }
+            }
+        }
+    }
+
+    function parseFile(apiUrl: string, file: ts.SourceFile, typeChecker: ts.TypeChecker) {
         const endpointsFound: Method[] = [];
         const schemas: EndpointData = {};
-        const promises: Promise<void>[] = [];
 
-        const ast = ts.createSourceFile(apiUrl, code, ts.ScriptTarget.ESNext);
-        ast.forEachChild((node) => {
+        ts.forEachChild(file, (node) => {
             if (!ts.canHaveModifiers(node)) return;
 
             const isExported = node.modifiers?.some(
@@ -68,16 +119,36 @@ export function apiFetch(): Plugin {
                         const method = nameMatch[1].toUpperCase();
                         if (!methods.includes(method) || method === "GET") return;
 
-                        const UNSAFECODE = `import('zod').then(({z}) => {
-                                return ${code.slice(declaration.pos, declaration.end)};
-                            })`;
+                        const symbol = typeChecker.getSymbolAtLocation(declaration.name);
 
-                        promises.push(
-                            (0, eval)(UNSAFECODE).then(
-                                (schema: z.ZodTypeAny) =>
-                                    (schemas[method as Method] = anyZodToType(schema))
-                            )
-                        );
+                        if (symbol) {
+                            const type = typeChecker.getTypeOfSymbolAtLocation(
+                                symbol,
+                                symbol.valueDeclaration!
+                            );
+
+                            const zodObjectType = type as ts.TypeReference;
+                            if (
+                                zodObjectType.typeArguments &&
+                                zodObjectType.typeArguments.length === 5
+                            ) {
+                                const inputType = zodObjectType.typeArguments[4];
+                                schemas[method as Method] = typeChecker.typeToString(inputType);
+                            } else {
+                                console.log(
+                                    `Variable '${symbol.name}' type: ${typeChecker.typeToString(
+                                        type
+                                    )}`
+                                );
+                                console.log(
+                                    `Variable '${symbol.name}' pure type: ${type.getSymbol()
+                                        ?.escapedName}`
+                                );
+                            }
+                        } else {
+                            console.error("no symbol wtf");
+                            return;
+                        }
                     }
                 });
             } else if (ts.isFunctionDeclaration(node)) {
@@ -91,8 +162,6 @@ export function apiFetch(): Plugin {
                 }
             }
         });
-
-        await Promise.allSettled(promises);
 
         for (const method of endpointsFound) {
             projectAPI[method][apiUrl.replaceAll("\\", "/")] = schemas[method] ?? "never";
@@ -123,69 +192,38 @@ export function apiFetch(): Plugin {
     return {
         name: "sveltekit-api-fetch",
 
-        async configureServer(s) {
+        configureServer(s) {
             projectPath = s.config.root;
             serverEndpointPathRegex = RegExp(
                 `^(?:${projectPath}/)?src/routes(/.*)?/\\+server\\.(ts|js)$`
             );
 
-            const serverFiles = glob.sync("src/routes/**/+server.ts", { cwd: projectPath });
+            watch?.close();
+            hotUpdateFiles = [];
+            clearTimeout(hotUpdateTimeout);
 
-            const promises: Promise<void>[] = [];
-            for (const filePath of serverFiles) {
-                promises.push(
-                    parseFile(
-                        filePath.substring(10, filePath.length - 11),
-                        await readFile(filePath, { encoding: "utf8" })
-                    )
-                );
-            }
-
-            await Promise.allSettled(promises);
-            await save();
+            watchProject();
+            parseProject();
+            save();
         },
 
-        async handleHotUpdate(ctx) {
-            const match = serverEndpointPathRegex.exec(ctx.file);
-            if (!match) return;
+        closeWatcher() {
+            watch.close();
+        },
 
-            await parseFile(match[1] || "/", await ctx.read());
-            await save();
+        handleHotUpdate(ctx) {
+            if (serverEndpointPathRegex.test(ctx.file)) {
+                hotUpdateFiles.push(ctx.file);
+
+                clearTimeout(hotUpdateTimeout);
+                hotUpdateTimeout = setTimeout(() => {
+                    parseProject(hotUpdateFiles);
+                    save();
+                    hotUpdateFiles = [];
+                }, 300);
+            }
         },
     };
-}
-
-function anyZodToType(zod: z.ZodTypeAny): string {
-    if (zod instanceof z.ZodOptional) {
-        return anyZodToType(zod._def.innerType);
-    } else if (zod instanceof z.ZodEffects) {
-        return anyZodToType(zod._def.schema);
-    } else if (zod instanceof z.ZodString) {
-        return "string";
-    } else if (zod instanceof z.ZodNumber) {
-        return "number";
-    } else if (zod instanceof z.ZodBoolean) {
-        return "boolean";
-    } else if (zod instanceof z.ZodArray) {
-        return anyZodToType(zod._def.type) + "[]";
-    } else if (zod instanceof z.ZodObject) {
-        const typeString = Object.entries(zod.shape).map(([key, value]) => {
-            const optionalSuffix = (value as z.ZodAny).isOptional() ? "?" : "";
-            const type = anyZodToType(value as z.ZodAny);
-
-            return `${key}${optionalSuffix}: ${type}`;
-        });
-
-        if (typeString.length === 0) {
-            return "Record<string, never>";
-        }
-
-        return `{ ${typeString.join("; ")} }`;
-    } else if (zod instanceof z.ZodNull) {
-        return "null";
-    }
-
-    return "undefined";
 }
 
 const typeFileMessage = `/**
