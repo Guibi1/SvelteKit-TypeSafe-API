@@ -143,16 +143,20 @@ export function apiFetch(): Plugin {
         if (!typesFile) return;
 
         let url = "";
+        let params = "";
         ts.forEachChild(typesFile, (node) => {
             if (ts.isTypeAliasDeclaration(node)) {
                 if (node.name.text === "RouteId") {
                     url = typeChecker.typeToString(typeChecker.getTypeAtLocation(node));
+                } else if (node.name.text === "RouteParams") {
+                    params = node.type.getText();
+                    if (params === "{  }") params = "never";
                 }
             }
         });
 
         for (const method of endpointsFound) {
-            projectAPI[method][url] = schemas[method] ?? "never";
+            projectAPI[method][url] = `{ body: ${schemas[method] ?? "never"}; params: ${params}; }`;
         }
     }
 
