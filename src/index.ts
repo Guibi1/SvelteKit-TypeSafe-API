@@ -1,2 +1,3 @@
-export { api, createApiObject as createApi } from "./fetch.js";
-export { apiValidate } from "./validate.js";
+import { createApiObject } from "./fetch.js";
+
+export const api = createApiObject(fetch);
