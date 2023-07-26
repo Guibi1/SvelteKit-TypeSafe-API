@@ -44,20 +44,12 @@ export function apiFetch(): Plugin {
                 const sourceFile = program.getSourceFile(file);
                 if (!sourceFile) continue;
 
-                parseFile(
-                    "/" + path.dirname(path.relative(routesPath, sourceFile.fileName)),
-                    sourceFile,
-                    typeChecker
-                );
+                parseFile(sourceFile, typeChecker);
             }
         } else {
             for (const sourceFile of sourceFiles) {
                 if (serverEndpointPathRegex.test(sourceFile.fileName)) {
-                    parseFile(
-                        "/" + path.dirname(path.relative(routesPath, sourceFile.fileName)),
-                        sourceFile,
-                        typeChecker
-                    );
+                    parseFile(sourceFile, typeChecker);
                 }
             }
         }
@@ -65,7 +57,7 @@ export function apiFetch(): Plugin {
         save();
     }
 
-    function parseFile(apiUrl: string, file: ts.SourceFile, typeChecker: ts.TypeChecker) {
+    function parseFile(file: ts.SourceFile, typeChecker: ts.TypeChecker) {
         const endpointsFound: Method[] = [];
         const schemas: EndpointData = {};
 
@@ -138,8 +130,29 @@ export function apiFetch(): Plugin {
             }
         });
 
+        if (endpointsFound.length === 0) return;
+
+        const typesFile = program.getSourceFile(
+            path.join(
+                projectPath,
+                ".svelte-kit/types",
+                path.relative(projectPath, path.dirname(file.fileName)),
+                "$types.d.ts"
+            )
+        );
+        if (!typesFile) return;
+
+        let url = "";
+        ts.forEachChild(typesFile, (node) => {
+            if (ts.isTypeAliasDeclaration(node)) {
+                if (node.name.text === "RouteId") {
+                    url = typeChecker.typeToString(typeChecker.getTypeAtLocation(node));
+                }
+            }
+        });
+
         for (const method of endpointsFound) {
-            projectAPI[method][apiUrl.replaceAll("\\", "/")] = schemas[method] ?? "never";
+            projectAPI[method][url] = schemas[method] ?? "never";
         }
     }
 
@@ -154,7 +167,7 @@ export function apiFetch(): Plugin {
                       .map(
                           (method) =>
                               `    ${method}: {\n${Object.entries(projectAPI[method as Method])
-                                  .map(([url, type]) => `        "${url}": ${type}`)
+                                  .map(([url, type]) => `        ${url}: ${type}`)
                                   .join(";\n")};\n    }`
                       )
                       .join(";\n")};\n}`
