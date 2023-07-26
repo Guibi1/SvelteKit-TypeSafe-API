@@ -11,12 +11,6 @@ type ProjectAPI = Record<Method, Record<string, string>>;
 export function apiFetch(): Plugin {
     let projectPath = "";
     let serverEndpointPathRegex = RegExp("");
-
-    let watch: ts.WatchOfConfigFile<ts.SemanticDiagnosticsBuilderProgram>;
-    let program: ts.Program;
-    let hotUpdateFiles: string[] = [];
-    let hotUpdateTimeout: NodeJS.Timeout;
-
     const projectAPI: ProjectAPI = {
         GET: {},
         POST: {},
@@ -26,33 +20,27 @@ export function apiFetch(): Plugin {
         OPTIONS: {},
     };
 
-    function watchProject() {
-        const configPath = ts.findConfigFile("./", ts.sys.fileExists, "tsconfig.json");
-        if (!configPath) {
-            throw new Error("Could not find a valid 'tsconfig.json'.");
-        }
+    let config: ts.ParsedCommandLine;
+    let host: ts.CompilerHost;
+    let program: ts.Program;
 
-        const host = ts.createWatchCompilerHost(
-            configPath,
-            { noEmit: true, checkJs: false, skipLibCheck: true },
-            ts.sys,
-            ts.createSemanticDiagnosticsBuilderProgram,
-            () => {},
-            () => {}
-        );
+    let hotUpdateFiles: string[] = [];
+    let hotUpdateTimeout: NodeJS.Timeout;
 
-        host.afterProgramCreate = (b) => (program = b.getProgram());
+    function parseProject(files?: string[]) {
+        program = ts.createProgram({
+            rootNames: config.fileNames,
+            options: config.options,
+            oldProgram: program,
+            host: host,
+        });
 
-        watch = ts.createWatchProgram(host);
-    }
-
-    function parseProject(hotUpdateFiles?: string[]) {
         const sourceFiles = program.getSourceFiles();
         const typeChecker = program.getTypeChecker();
         const routesPath = path.join(projectPath, "src/routes");
 
-        if (hotUpdateFiles) {
-            for (const file of hotUpdateFiles) {
+        if (files) {
+            for (const file of files) {
                 const sourceFile = program.getSourceFile(file);
                 if (!sourceFile) continue;
 
@@ -73,6 +61,8 @@ export function apiFetch(): Plugin {
                 }
             }
         }
+
+        save();
     }
 
     function parseFile(apiUrl: string, file: ts.SourceFile, typeChecker: ts.TypeChecker) {
@@ -122,28 +112,13 @@ export function apiFetch(): Plugin {
                         const symbol = typeChecker.getSymbolAtLocation(declaration.name);
 
                         if (symbol) {
-                            const type = typeChecker.getTypeOfSymbolAtLocation(
-                                symbol,
-                                symbol.valueDeclaration!
+                            const typeArguments = typeChecker.getTypeArguments(
+                                typeChecker.getTypeOfSymbol(symbol) as ts.TypeReference
                             );
 
-                            const zodObjectType = type as ts.TypeReference;
-                            if (
-                                zodObjectType.typeArguments &&
-                                zodObjectType.typeArguments.length === 5
-                            ) {
-                                const inputType = zodObjectType.typeArguments[4];
+                            if (typeArguments.length === 5) {
+                                const inputType = typeArguments[4];
                                 schemas[method as Method] = typeChecker.typeToString(inputType);
-                            } else {
-                                console.log(
-                                    `Variable '${symbol.name}' type: ${typeChecker.typeToString(
-                                        type
-                                    )}`
-                                );
-                                console.log(
-                                    `Variable '${symbol.name}' pure type: ${type.getSymbol()
-                                        ?.escapedName}`
-                                );
                             }
                         } else {
                             console.error("no symbol wtf");
@@ -171,6 +146,7 @@ export function apiFetch(): Plugin {
     async function save() {
         const projectMethods = methods.filter((m) => Object.keys(projectAPI[m as Method]).length);
 
+        const filePath = path.join(projectPath, "src/api.d.ts");
         const fileContent = `${typeFileMessage}\ntype ProjectAPI = ${
             projectMethods.length === 0
                 ? "object"
@@ -184,8 +160,6 @@ export function apiFetch(): Plugin {
                       .join(";\n")};\n}`
         };\n`;
 
-        const filePath = path.join(projectPath, "src/api.d.ts");
-
         await writeFile(filePath, fileContent);
     }
 
@@ -193,22 +167,35 @@ export function apiFetch(): Plugin {
         name: "sveltekit-api-fetch",
 
         configureServer(s) {
+            clearTimeout(hotUpdateTimeout);
+            hotUpdateFiles = [];
+
             projectPath = s.config.root;
             serverEndpointPathRegex = RegExp(
                 `^(?:${projectPath}/)?src/routes(/.*)?/\\+server\\.(ts|js)$`
             );
 
-            watch?.close();
-            hotUpdateFiles = [];
-            clearTimeout(hotUpdateTimeout);
+            const configPath = ts.findConfigFile(projectPath, ts.sys.fileExists, "tsconfig.json");
+            if (!configPath) {
+                throw new Error("Could not find a valid 'tsconfig.json'.");
+            }
 
-            watchProject();
+            config = ts.parseJsonConfigFileContent(
+                ts.readConfigFile(configPath, ts.sys.readFile).config,
+                ts.sys,
+                projectPath,
+                {
+                    noEmit: true,
+                    checkJs: false,
+                    skipLibCheck: true,
+                    incremental: true,
+                    tsBuildInfoFile: path.join(projectPath, "tsbuildinfo"),
+                },
+                configPath
+            );
+            host = ts.createCompilerHost(config.options);
+
             parseProject();
-            save();
-        },
-
-        closeWatcher() {
-            watch.close();
         },
 
         handleHotUpdate(ctx) {
@@ -218,7 +205,6 @@ export function apiFetch(): Plugin {
                 clearTimeout(hotUpdateTimeout);
                 hotUpdateTimeout = setTimeout(() => {
                     parseProject(hotUpdateFiles);
-                    save();
                     hotUpdateFiles = [];
                 }, 300);
             }
