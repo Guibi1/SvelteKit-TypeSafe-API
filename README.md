@@ -39,7 +39,7 @@ Follow these 3 simple steps to harnest the power of `zod` and `TypeScript` in yo
     // src/routes/.../+server.ts
     import { json } from "@sveltejs/kit";
     import { z } from "zod";
-    import { apiValidate } from "sveltekit-api-fetch";
+    import { apiValidate } from "sveltekit-api-fetch/server";
 
     const _postSchema = z.object({
         email: z.string().email(),
@@ -58,10 +58,15 @@ Follow these 3 simple steps to harnest the power of `zod` and `TypeScript` in yo
 
 3. All done, you can finally enjoy the new type safe `api` !
 
-    ```ts
-    import { api } from "sveltekit-api-fetch";
+    ```svelte
+    <script>
+        import { api } from "sveltekit-api-fetch";
+        import { onMount } from "svelte";
 
-    const res = api.POST("/api", { email: "laurent@guibi.ca", password: "******" });
+        let res: Promise<Response> | undefined;
+
+        onMount(() => res = api.POST("/api", { body: { email: "laurent@guibi.ca", password: "******" } }));
+    </sricpt>
     ```
 
 ## Contributing
