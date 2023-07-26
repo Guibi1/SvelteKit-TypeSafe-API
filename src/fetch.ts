@@ -65,5 +65,3 @@ export function createApiObject(fetch: Fetch) {
         OPTIONS: createRequest("OPTIONS"),
     };
 }
-
-export const api = createApiObject(fetch);
