@@ -10,7 +10,7 @@ export async function apiValidate<T extends z.ZodType>(data: object, schema: T, 
         throw error(400, "Invalid data: " + parse.error.message);
     }
 
-    return { data: parse.data, apiFetch: createApiObject(f ?? fetch) };
+    return { data: parse.data, api: createApiObject(f ?? fetch) };
 }
 
 async function parseRequestData(data: RequestEvent | Request | object) {
