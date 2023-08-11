@@ -3,7 +3,7 @@ type Fetch = typeof fetch;
 type AllowedMethod = keyof ProjectAPI;
 type AllowedUrl<M extends AllowedMethod> = keyof ProjectAPI[M];
 
-type Fields = "body" | "routeParams";
+type Fields = "body" | "routeParams" | "searchParams";
 type AllowedData<
     M extends AllowedMethod,
     U extends AllowedUrl<M>,
@@ -29,10 +29,7 @@ const apiFetch = function <M extends AllowedMethod, U extends AllowedUrl<M>>(
 ): Promise<Response> {
     const body = init.body ? JSON.stringify((init as RequestInit).body) : undefined;
     const routeParams = init.routeParams ? Object.entries<string>(init.routeParams) : [];
-
-    const input = routeParams.reduce((url, [param, value]) => {
-        return url.replace(RegExp(`\/\\[(\\.\\.\\.)?${param}\\](\/|$)`), `\/${value}\/`);
-    }, url as string);
+    const searchParams = init.searchParams ? Object.entries<string>(init.searchParams) : [];
 
     const headers = {
         "Content-Type": "application/json",
@@ -41,7 +38,8 @@ const apiFetch = function <M extends AllowedMethod, U extends AllowedUrl<M>>(
     };
 
     delete init.routeParams;
-    return fetch(input, {
+    delete init.searchParams;
+    return fetch(generateUrl(url as string, routeParams, searchParams), {
         ...init,
         method,
         headers,
@@ -64,4 +62,25 @@ export function createApiObject(fetch: Fetch) {
         DELETE: createRequest("DELETE"),
         OPTIONS: createRequest("OPTIONS"),
     };
+}
+
+function generateUrl(
+    route: string,
+    routeParams: [string, string][],
+    searchParams: [string, string][]
+) {
+    const url = routeParams
+        .reduce((route, [param, value]) => {
+            return route.replace(RegExp(`\/\\[(\\.\\.\\.)?${param}\\](\/|$)`), `\/${value}\/`);
+        }, route)
+        .replace(/\/$/, "");
+
+    if (searchParams.length === 0) return url;
+
+    const urlSearchParams = new URLSearchParams();
+    for (const [name, value] of searchParams) {
+        urlSearchParams.set(name, value);
+    }
+
+    return `${url}?${urlSearchParams.toString()}`;
 }
