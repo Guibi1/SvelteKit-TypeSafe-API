@@ -3,7 +3,7 @@ type Fetch = typeof fetch;
 type AllowedMethod = keyof ProjectAPI;
 type AllowedUrl<M extends AllowedMethod> = keyof ProjectAPI[M];
 
-type Fields = "body" | "params";
+type Fields = "body" | "routeParams";
 type AllowedData<
     M extends AllowedMethod,
     U extends AllowedUrl<M>,
@@ -27,10 +27,10 @@ const apiFetch = function <M extends AllowedMethod, U extends AllowedUrl<M>>(
     init: Init<M, U>,
     fetch: Fetch
 ): Promise<Response> {
-    const params = init.params ? Object.entries(init.params) : [];
     const body = init.body ? JSON.stringify((init as RequestInit).body) : undefined;
+    const routeParams = init.routeParams ? Object.entries<string>(init.routeParams) : [];
 
-    const input = params.reduce((url, [param, value]) => {
+    const input = routeParams.reduce((url, [param, value]) => {
         return url.replace(RegExp(`\/\\[(\\.\\.\\.)?${param}\\](\/|$)`), `\/${value}\/`);
     }, url as string);
 
@@ -40,8 +40,8 @@ const apiFetch = function <M extends AllowedMethod, U extends AllowedUrl<M>>(
         ...(init ? init.headers : {}),
     };
 
-    delete init.params;
-    return fetch(input.replace(/\/$/, ""), {
+    delete init.routeParams;
+    return fetch(input, {
         ...init,
         method,
         headers,

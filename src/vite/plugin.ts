@@ -143,20 +143,23 @@ export function apiFetch(): Plugin {
         if (!typesFile) return;
 
         let url = "";
-        let params = "";
+        let routeParams: string | undefined;
         ts.forEachChild(typesFile, (node) => {
             if (ts.isTypeAliasDeclaration(node)) {
                 if (node.name.text === "RouteId") {
                     url = typeChecker.typeToString(typeChecker.getTypeAtLocation(node));
                 } else if (node.name.text === "RouteParams") {
-                    params = node.type.getText();
-                    if (params === "{  }") params = "never";
+                    routeParams = node.type.getText();
+                    if (routeParams === "{  }") routeParams = undefined;
                 }
             }
         });
 
         for (const method of endpointsFound) {
-            projectAPI[method][url] = `{ body: ${schemas[method] ?? "never"}; params: ${params}; }`;
+            projectAPI[method][url] = generateUrlType({
+                body: schemas[method],
+                routeParams: routeParams,
+            });
         }
     }
 
@@ -227,6 +230,14 @@ export function apiFetch(): Plugin {
             }
         },
     };
+}
+
+function generateUrlType(fields: Record<string, string | undefined>) {
+    const entries = Object.entries(fields).filter(([_, type]) => type !== undefined);
+
+    if (entries.length === 0) return "never";
+
+    return `{ ${entries.map(([name, type]) => `${name}: ${type}`).join("; ")} }`;
 }
 
 const typeFileMessage = `/**
