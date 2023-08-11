@@ -1,12 +1,10 @@
 import { RequestEvent, error } from "@sveltejs/kit";
-import { z } from "zod";
+import type { SafeParseReturnType, ZodType } from "zod";
 import { createApiObject } from "./fetch.js";
 
-export async function apiValidate<T extends z.ZodType>(data: Data, schema: T, f?: typeof fetch) {
+export async function apiValidate<T extends ZodType>(data: Data, schema: T, f?: typeof fetch) {
     const json = await parseData(data);
-    console.log("🚀 ~ file: validate.ts:7 ~ json:", json);
-
-    const parse = schema.safeParse(json) as z.SafeParseReturnType<T["_input"], T["_output"]>;
+    const parse = schema.safeParse(json) as SafeParseReturnType<T["_input"], T["_output"]>;
 
     if (!parse.success) {
         throw error(400, "Invalid data: " + parse.error.message);
