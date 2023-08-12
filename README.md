@@ -33,27 +33,28 @@ Follow these 3 simple steps to harnest the power of `zod` and `TypeScript` in yo
     });
     ```
 
-2. Create a `zod` object to validate the endpoint's request body, and pass it to the `apiValidate` function. The important bit here is to name the `zod` object according to the endpoint's method. (`_postSchema`, `_deleteSchema`, `_putSchema`, etc)
+2. Create a `zod` object to validate the endpoint's request body, and pass it to the `apiValidate` function.
 
     ```ts
-    // src/routes/.../+server.ts
+    // src/routes/api/+server.ts
     import { json } from "@sveltejs/kit";
     import { z } from "zod";
-    import { apiValidate } from "sveltekit-api-fetch/server";
+    import { apiValidate, type EndpointSchema } from "sveltekit-api-fetch/server";
+    import type { RequestHandler } from "./$types";
 
-    const _postSchema = z.object({
+    const postSchema = {
         email: z.string().email(),
         password: z.string().min(8),
-    });
+    } } satisfies EndpointSchema;
 
-    export const POST = async ({ request }) => {
-        const { data } = await apiValidate(request, _postSchema);
+    export const POST = (async ({ request }) => {
+        const { data } = await apiValidate(request, postSchema);
 
         return json({
             success: true,
             jwt: db.createJWT({ email: data.email, password: data.password }),
         });
-    };
+    }) satisfies RequestHandler;
     ```
 
 3. All done, you can finally enjoy the new type safe `api` !

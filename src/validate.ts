@@ -1,10 +1,14 @@
 import { RequestEvent, error } from "@sveltejs/kit";
-import type { SafeParseReturnType, ZodType } from "zod";
+import { ZodEffects, z, type ZodObject, type ZodType, type ZodTypeAny } from "zod";
 import { createApiObject } from "./fetch.js";
 
-export async function apiValidate<T extends ZodType>(data: Data, schema: T, f?: typeof fetch) {
+export async function apiValidate<T extends EndpointSchema>(
+    data: Data,
+    schema: T,
+    f?: typeof fetch
+) {
     const json = await parseData(data);
-    const parse = schema.safeParse(json) as SafeParseReturnType<T["_input"], T["_output"]>;
+    const parse = z.object(schema).safeParse(json);
 
     if (!parse.success) {
         throw error(400, "Invalid data: " + parse.error.message);
@@ -37,3 +41,14 @@ async function parseData(data: RequestEvent | Request | object) {
 }
 
 type Data = RequestEvent | Request | URL | { request?: Request; url?: URL } | object;
+
+type SearchParams = ZodObject<Record<string, ZodType<any, any, string>>>;
+
+type NoUndefined<T> = {
+    [K in keyof T]: Exclude<T[K], undefined>;
+};
+
+export type EndpointSchema = NoUndefined<{
+    searchParams?: SearchParams | ZodEffects<SearchParams>;
+    [k: string]: ZodTypeAny | undefined;
+}>;
