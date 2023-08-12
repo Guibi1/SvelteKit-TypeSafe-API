@@ -2,6 +2,7 @@ import { writeFile } from "fs/promises";
 import path from "path";
 import ts from "typescript";
 import type { Plugin } from "vite";
+import { generateUrlType, getSchemaFromFunction, parseSchema } from "./helpers.js";
 
 const methods = ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"];
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE" | "OPTIONS";
@@ -37,7 +38,6 @@ export function apiFetch(): Plugin {
 
         const sourceFiles = program.getSourceFiles();
         const typeChecker = program.getTypeChecker();
-        const routesPath = path.join(projectPath, "src/routes");
 
         if (files) {
             for (const file of files) {
@@ -63,50 +63,55 @@ export function apiFetch(): Plugin {
         let allSearchParams: EndpointData = {};
 
         ts.forEachChild(file, (node) => {
-            if (!ts.canHaveModifiers(node)) return;
-
-            const isExported = node.modifiers?.some(
-                (mod) => mod.kind === ts.SyntaxKind.ExportKeyword
-            );
+            if (
+                !ts.canHaveModifiers(node) ||
+                !node.modifiers?.some((mod) => mod.kind === ts.SyntaxKind.ExportKeyword)
+            ) {
+                return;
+            }
 
             if (ts.isVariableStatement(node)) {
                 node.declarationList.declarations.forEach((declaration) => {
-                    if (!ts.isIdentifier(declaration.name)) {
-                        console.error("no name");
-                        return;
-                    }
+                    if (!ts.isIdentifier(declaration.name)) return;
 
                     // Handle exported endpoint (ex. export const POST = ...)
-                    else if (
-                        isExported &&
-                        methods.includes(declaration.name.escapedText as string)
-                    ) {
-                        endpointsFound.push(declaration.name.escapedText as Method);
-                    }
+                    const variableName = declaration.name.escapedText as string;
+                    if (methods.includes(variableName)) {
+                        endpointsFound.push(variableName as Method);
 
-                    // Handle schema declaration (ex. const _postSchema = ...)
-                    else if (isZodObjectVariableDeclaration(declaration)) {
-                        const nameMatch = /^_(.*)Schema$/.exec(
-                            declaration.name.escapedText as string
-                        );
-                        if (!nameMatch) return;
+                        const schema = ts.forEachChild(declaration, (node) => {
+                            if (ts.isSatisfiesExpression(node)) {
+                                return ts.forEachChild(node.expression, (node) => {
+                                    if (ts.isFunctionLike(node)) {
+                                        return getSchemaFromFunction(node);
+                                    }
+                                });
+                            } else if (ts.isFunctionLike(node)) {
+                                return getSchemaFromFunction(node);
+                            }
+                        });
 
-                        const method = nameMatch[1].toUpperCase();
-                        if (!methods.includes(method) || method === "GET") return;
-
-                        const { body, searchParams } = parseZodSchema(typeChecker, declaration);
-                        allBodies[method as Method] = body;
-                        allSearchParams[method as Method] = searchParams;
+                        if (schema) {
+                            const { body, searchParams } = parseSchema(typeChecker, schema);
+                            allBodies[variableName as Method] = body;
+                            allSearchParams[variableName as Method] = searchParams;
+                        }
                     }
                 });
             } else if (ts.isFunctionDeclaration(node)) {
-                if (!node.name || !ts.isIdentifier(node.name)) {
-                    console.error("no name");
-                    return;
-                }
+                if (!node.name || !ts.isIdentifier(node.name)) return;
 
-                if (isExported && methods.includes(node.name.escapedText as string)) {
-                    endpointsFound.push(node.name.escapedText as Method);
+                // Handle exported endpoint (ex. export function POST() ...)
+                const variableName = node.name.escapedText as string;
+                if (methods.includes(variableName)) {
+                    endpointsFound.push(variableName as Method);
+
+                    const schema = getSchemaFromFunction(node);
+                    if (schema) {
+                        const { body, searchParams } = parseSchema(typeChecker, schema);
+                        allBodies[variableName as Method] = body;
+                        allSearchParams[variableName as Method] = searchParams;
+                    }
                 }
             }
         });
@@ -212,78 +217,6 @@ export function apiFetch(): Plugin {
             }
         },
     };
-}
-
-function generateUrlType(fields: Record<string, string | undefined>) {
-    const entries = Object.entries(fields).filter(([_, type]) => type !== undefined);
-
-    if (entries.length === 0) return "never";
-
-    return `{ ${entries.map(([name, type]) => `${name}: ${type}`).join("; ")} }`;
-}
-
-function isZodObjectVariableDeclaration(node: ts.VariableDeclaration) {
-    // TODO: Make sure it is z.object
-    return (
-        node.initializer &&
-        ts.isCallExpression(node.initializer) &&
-        ts.isPropertyAccessExpression(node.initializer.expression) &&
-        ts.isIdentifier(node.initializer.expression.expression) &&
-        node.initializer.expression.expression.escapedText === "z" &&
-        node.initializer.arguments.length > 0 &&
-        ts.isObjectLiteralExpression(node.initializer.arguments[0])
-    );
-}
-
-function parseZodSchema(
-    typeChecker: ts.TypeChecker,
-    zodVariableDeclaration: ts.VariableDeclaration
-) {
-    const zodTypeArguments = typeChecker.getTypeArguments(
-        typeChecker.getTypeAtLocation(zodVariableDeclaration) as ts.TypeReference
-    );
-
-    let body: string | undefined;
-    let searchParams: string | undefined;
-
-    if (zodTypeArguments.length === 5) {
-        const zodInputType = zodTypeArguments[4];
-
-        body = `{ ${typeChecker
-            .getPropertiesOfType(zodInputType)
-            .map((property) => {
-                if (property.getName() === "searchParams") return null;
-                const type = typeChecker.getTypeOfSymbol(property);
-                return `${property.getName()}: ${typeChecker.typeToString(type)}`;
-            })
-            .filter((t) => t !== null)
-            .join("; ")} }`;
-
-        const searchParamsSymbol = zodInputType.getProperty("searchParams");
-        if (searchParamsSymbol) {
-            const searchParamsType = typeChecker.getTypeOfSymbol(searchParamsSymbol);
-
-            // Check if the type is an object type
-            if (searchParamsType.getFlags() & ts.TypeFlags.Object) {
-                searchParams = typeChecker.typeToString(searchParamsType);
-
-                if (
-                    !typeChecker.getPropertiesOfType(searchParamsType).every((property) => {
-                        const propertyType = typeChecker.getTypeOfSymbol(property);
-                        return propertyType.flags === ts.TypeFlags.String;
-                    })
-                ) {
-                    console.error(
-                        "Some fields of `searchParams` are not having string as their input. This may cause the validation to fail."
-                    );
-                }
-            } else {
-                console.error("The field `searchParams` has to be a Zod Object.");
-            }
-        }
-    }
-
-    return { body, searchParams };
 }
 
 const typeFileMessage = `/**
