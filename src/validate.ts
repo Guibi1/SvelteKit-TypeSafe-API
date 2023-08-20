@@ -1,4 +1,4 @@
-import { RequestEvent, error } from "@sveltejs/kit";
+import { RequestEvent } from "@sveltejs/kit";
 import { ZodEffects, z, type ZodObject, type ZodType, type ZodTypeAny } from "zod";
 import { createApiObject } from "./fetch.js";
 
@@ -11,10 +11,21 @@ export async function apiValidate<T extends EndpointSchema>(
     const parse = z.object(schema).safeParse(json);
 
     if (!parse.success) {
-        throw error(400, "Invalid data: " + parse.error.message);
+        if (
+            parse.error.issues.some((i) => i.path.length === 1 && i.path.at(0) === "searchParams")
+        ) {
+            console.error(
+                "The following error might be caused because you you forgot to pass the event url to `apiValidate`."
+            );
+        }
+
+        throw `Invalid data: ${parse.error.issues
+            .map((i) => `at '${i.path.join(".")}': '${i.message}'`)
+            .join(", ")}.`;
     }
 
-    return { data: parse.data, api: createApiObject(f ?? fetch) };
+    const requestFetch = f ?? ("fetch" in data ? data.fetch : fetch);
+    return { data: parse.data, api: createApiObject(requestFetch) };
 }
 
 async function parseData(data: RequestEvent | Request | object) {
