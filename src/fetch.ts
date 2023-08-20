@@ -32,8 +32,8 @@ const apiFetch = function <M extends AllowedMethod, U extends AllowedUrl<M>>(
     const searchParams = init.searchParams ? Object.entries<string>(init.searchParams) : [];
 
     const headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
+        Accept: "application/json",
+        ...(body ? { "Content-Type": "application/json" } : {}),
         ...(init ? init.headers : {}),
     };
 

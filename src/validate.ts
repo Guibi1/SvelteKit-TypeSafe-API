@@ -18,25 +18,42 @@ export async function apiValidate<T extends EndpointSchema>(
 }
 
 async function parseData(data: RequestEvent | Request | object) {
-    let request = null;
-    let searchParams = null;
+    let request: Request | undefined;
+    let url: URL | undefined;
 
     if ("request" in data && data.request instanceof Request) {
-        request = await data.request.json();
+        request = data.request;
     } else if (data instanceof Request) {
-        request = await data.json();
+        request = data;
     }
 
     if ("url" in data && data.url instanceof URL) {
-        searchParams = Object.fromEntries(data.url.searchParams.entries());
+        url = data.url;
     } else if (data instanceof URL) {
-        searchParams = Object.fromEntries(data.searchParams.entries());
+        url = data;
     }
 
-    if (request === null && searchParams === null) {
+    if (!request && !url) {
         return data;
     } else {
-        return { ...request, searchParams: { ...searchParams } };
+        const searchParams = url ? Object.fromEntries(url.searchParams.entries()) : {};
+        const body = request ? await handleRequest(request) : {};
+
+        return { ...body, searchParams };
+    }
+}
+
+async function handleRequest(request: Request) {
+    const contentType = request.headers.get("Content-Type");
+    if (contentType && contentType.includes("application/json")) {
+        const json = await request
+            .text()
+            .then((text) => JSON.parse(text) as unknown)
+            .catch(() => undefined);
+
+        if (typeof json === "object") {
+            return json;
+        }
     }
 }
 
