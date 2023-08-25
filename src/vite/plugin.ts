@@ -92,7 +92,11 @@ export function apiFetch(): Plugin {
                         });
 
                         if (schema) {
-                            const { body, searchParams } = parseSchema(typeChecker, schema);
+                            const { body, searchParams } = parseSchema(
+                                typeChecker,
+                                schema,
+                                variableName.toUpperCase() === "GET"
+                            );
                             allBodies[variableName as Method] = body;
                             allSearchParams[variableName as Method] = searchParams;
                         }
@@ -108,7 +112,11 @@ export function apiFetch(): Plugin {
 
                     const schema = getSchemaFromFunction(node);
                     if (schema) {
-                        const { body, searchParams } = parseSchema(typeChecker, schema);
+                        const { body, searchParams } = parseSchema(
+                            typeChecker,
+                            schema,
+                            variableName.toUpperCase() === "GET"
+                        );
                         allBodies[variableName as Method] = body;
                         allSearchParams[variableName as Method] = searchParams;
                     }
