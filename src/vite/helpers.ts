@@ -28,22 +28,28 @@ export function getSchemaFromFunction(func: ts.SignatureDeclaration) {
     });
 }
 
-export function parseSchema(typeChecker: ts.TypeChecker, zodVariableDeclaration: ts.Node) {
+export function parseSchema(
+    typeChecker: ts.TypeChecker,
+    zodVariableDeclaration: ts.Node,
+    skipBody = false
+) {
     const zodInputType = typeChecker.getTypeAtLocation(zodVariableDeclaration);
 
-    const body = `{ ${typeChecker
-        .getPropertiesOfType(zodInputType)
-        .map((property) => {
-            if (property.getName() === "searchParams") return null;
-            const outputType = getZodTypeToString(
-                typeChecker,
-                typeChecker.getTypeOfSymbol(property)
-            );
-            if (!outputType) return null;
-            return `${property.getName()}: ${outputType}`;
-        })
-        .filter((t) => t !== null)
-        .join("; ")} }`;
+    const body = skipBody
+        ? undefined
+        : `{ ${typeChecker
+              .getPropertiesOfType(zodInputType)
+              .map((property) => {
+                  if (property.getName() === "searchParams") return null;
+                  const outputType = getZodTypeToString(
+                      typeChecker,
+                      typeChecker.getTypeOfSymbol(property)
+                  );
+                  if (!outputType) return null;
+                  return `${property.getName()}: ${outputType}`;
+              })
+              .filter((t) => t !== null)
+              .join("; ")} }`;
 
     let searchParams: string | undefined;
     const searchParamsSymbol = zodInputType.getProperty("searchParams");
