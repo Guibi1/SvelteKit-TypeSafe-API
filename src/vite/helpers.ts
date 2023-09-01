@@ -58,21 +58,7 @@ export function parseSchema(
 
         // Check if the type is an object type
         if (searchParamsType.getFlags() & ts.TypeFlags.Object) {
-            const outputType = getZodTypeToString(typeChecker, searchParamsType);
-            searchParams = outputType;
-
-            if (
-                !typeChecker.getPropertiesOfType(searchParamsType).every((property) => {
-                    const propertyType = typeChecker.getTypeOfSymbol(property);
-                    return propertyType.flags === ts.TypeFlags.String;
-                })
-            ) {
-                console.error(
-                    "Some fields of `searchParams` are not having string as their input. This may cause the validation to fail."
-                );
-            }
-        } else {
-            console.error("The field `searchParams` has to be a Zod Object.");
+            searchParams = getZodTypeToString(typeChecker, searchParamsType);
         }
     }
 
