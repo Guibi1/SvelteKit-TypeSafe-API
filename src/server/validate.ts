@@ -1,13 +1,25 @@
 import { RequestEvent } from "@sveltejs/kit";
-import { ZodEffects, z, type ZodObject, type ZodType, type ZodTypeAny } from "zod";
-import { createApiObject } from "./fetch.js";
+import type {
+    ZodCatch,
+    ZodDefault,
+    ZodEffects,
+    ZodFirstPartySchemaTypes,
+    ZodNullable,
+    ZodObject,
+    ZodOptional,
+    ZodType,
+    ZodTypeAny,
+} from "zod";
+import { z } from "zod";
+import { createApiObject } from "../fetch.js";
+import { isZodArray, isZodBoolean } from "./helpers.js";
 
 export async function apiValidate<T extends EndpointSchema>(
     data: Data,
     schema: T,
     f?: typeof fetch
 ) {
-    const json = await parseData(data);
+    const json = await parseData(data, schema);
     const parse = z.object(schema).safeParse(json);
 
     if (!parse.success) {
@@ -28,7 +40,7 @@ export async function apiValidate<T extends EndpointSchema>(
     return { data: parse.data, api: createApiObject(requestFetch) };
 }
 
-async function parseData(data: RequestEvent | Request | object) {
+async function parseData(data: RequestEvent | Request | object, schema: EndpointSchema) {
     let request: Request | undefined;
     let url: URL | undefined;
 
@@ -47,7 +59,7 @@ async function parseData(data: RequestEvent | Request | object) {
     if (!request && !url) {
         return data;
     } else {
-        const searchParams = url ? Object.fromEntries(url.searchParams.entries()) : {};
+        const searchParams = searchParamsFromUrl(url, schema?.searchParams?.shape);
         const body = request ? await handleRequest(request) : {};
 
         return { ...body, searchParams };
@@ -68,15 +80,39 @@ async function handleRequest(request: Request) {
     }
 }
 
-type Data = RequestEvent | Request | URL | { request?: Request; url?: URL } | object;
+function searchParamsFromUrl(url: URL | undefined, shape: SearchParams | undefined) {
+    if (!url || !shape) return {};
 
-type SearchParams = ZodObject<Record<string, ZodType<any, any, string>>>;
+    return Object.fromEntries(
+        Array.from(url.searchParams.keys()).map((key) => {
+            if (isZodArray(shape[key])) {
+                console.log("is aa");
+                return [key, url?.searchParams.getAll(key)];
+            } else if (isZodBoolean(shape[key])) {
+                console.log("is bool");
+                return [key, url?.searchParams.has(key)];
+            } else {
+                console.log("none");
+                return [key, url?.searchParams.get(key)];
+            }
+        })
+    );
+}
+
+type Data = RequestEvent | Request | URL | { request?: Request; url?: URL } | object;
+type SearchParam = string | boolean | number | bigint | undefined | null;
 
 type NoUndefined<T> = {
     [K in keyof T]: Exclude<T[K], undefined>;
 };
 
+type SpecialZod<T extends ZodTypeAny> = T extends ZodFirstPartySchemaTypes
+    ? T
+    : ZodEffects<T> | ZodOptional<T> | ZodNullable<T> | ZodDefault<T> | ZodCatch<T>;
+
+type SearchParams = Record<string, SpecialZod<ZodType<any, any, SearchParam | Array<SearchParam>>>>;
+
 export type EndpointSchema = NoUndefined<{
-    searchParams?: SearchParams | ZodEffects<SearchParams>;
+    searchParams?: ZodObject<SearchParams>;
     [k: string]: ZodTypeAny | undefined;
 }>;

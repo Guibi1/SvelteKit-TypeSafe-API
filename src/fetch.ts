@@ -1,26 +1,3 @@
-type Fetch = typeof fetch;
-
-type AllowedMethod = keyof ProjectAPI;
-type AllowedUrl<M extends AllowedMethod> = keyof ProjectAPI[M];
-
-type Fields = "body" | "routeParams" | "searchParams";
-type AllowedData<
-    M extends AllowedMethod,
-    U extends AllowedUrl<M>,
-    Field extends string,
-> = Field extends keyof ProjectAPI[M][U] ? ProjectAPI[M][U][Field] : never;
-
-type Init<M extends AllowedMethod, U extends AllowedUrl<M>> = Omit<
-    RequestInit,
-    "body" | "method"
-> & { [Field in Fields]?: AllowedData<M, U, Field> };
-
-type PartialInit<M extends AllowedMethod, U extends AllowedUrl<M>> = Omit<Init<M, U>, Fields> &
-    Pick<
-        { [Field in Fields]: AllowedData<M, U, Field> },
-        { [Field in Fields]: AllowedData<M, U, Field> extends never ? never : Field }[Fields]
-    >;
-
 const apiFetch = function <M extends AllowedMethod, U extends AllowedUrl<M>>(
     method: M,
     url: U,
@@ -67,7 +44,7 @@ export function createApiObject(fetch: Fetch) {
 function generateUrl(
     route: string,
     routeParams: [string, string][],
-    searchParams: [string, string][]
+    searchParams: [string, unknown][]
 ) {
     const url = routeParams
         .reduce((route, [param, value]) => {
@@ -79,8 +56,49 @@ function generateUrl(
 
     const urlSearchParams = new URLSearchParams();
     for (const [name, value] of searchParams) {
-        urlSearchParams.set(name, value);
+        switch (typeof value) {
+            case "undefined":
+                break;
+            case "string":
+            case "boolean":
+            case "number":
+            case "bigint":
+                urlSearchParams.set(name, value.toString());
+                break;
+            case "object":
+                if (Array.isArray(value)) {
+                    for (const v of value) {
+                        urlSearchParams.append(name, v);
+                    }
+                    break;
+                }
+            default:
+                throw "Objects and functions aren't supported. Serialize or destructure the object instead of passing it whole.";
+        }
     }
 
     return `${url}?${urlSearchParams.toString()}`;
 }
+
+type Fetch = typeof fetch;
+
+type AllowedMethod = keyof ProjectAPI;
+type AllowedUrl<M extends AllowedMethod> = keyof ProjectAPI[M];
+
+type Fields = "body" | "routeParams" | "searchParams";
+type AllowedData<
+    M extends AllowedMethod,
+    U extends AllowedUrl<M>,
+    Field extends string,
+> = Field extends keyof ProjectAPI[M][U] ? ProjectAPI[M][U][Field] : never;
+
+type Init<M extends AllowedMethod, U extends AllowedUrl<M>> = Omit<
+    RequestInit,
+    "body" | "method"
+> & { [Field in Fields]?: AllowedData<M, U, Field> };
+
+type PartialInit<M extends AllowedMethod, U extends AllowedUrl<M>> = Omit<Init<M, U>, Fields> &
+    Pick<
+        { [Field in Fields]: AllowedData<M, U, Field> },
+        { [Field in Fields]: AllowedData<M, U, Field> extends never ? never : Field }[Fields]
+    >;
