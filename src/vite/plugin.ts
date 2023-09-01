@@ -9,7 +9,7 @@ type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE" | "OPTIONS";
 type EndpointData = Partial<Record<Method, string>>;
 type ProjectAPI = Record<Method, Record<string, string>>;
 
-export function apiFetch(): Plugin {
+export function typesafeApi(): Plugin {
     let projectPath = "";
     let serverEndpointPathRegex = RegExp("");
     const projectAPI: ProjectAPI = {
