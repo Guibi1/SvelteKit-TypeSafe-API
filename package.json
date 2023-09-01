@@ -1,8 +1,8 @@
 {
-    "name": "sveltekit-api-fetch",
-    "version": "3.2.0",
+    "name": "sveltekit-typesafe-api",
+    "version": "0.1.0",
     "author": "Laurent Stéphenne <laurent@guibi.ca>",
-    "description": "Adding type safety to SvelteKit's server endpoints.",
+    "description": "Adding type safety to SvelteKit's server endpoints and fetches.",
     "keywords": [
         "sveltekit",
         "typescript",
@@ -13,10 +13,10 @@
         "validation"
     ],
     "license": "MIT",
-    "homepage": "https://www.npmjs.com/package/sveltekit-api-fetch",
-    "bugs": "https://github.com/Guibi1/sveltekit-api-fetch/issues",
+    "homepage": "https://www.npmjs.com/package/sveltekit-typesafe-api",
+    "bugs": "https://github.com/Guibi1/sveltekit-typesafe-api/issues",
     "repository": {
-        "url": "https://github.com/Guibi1/sveltekit-api-fetch"
+        "url": "https://github.com/Guibi1/sveltekit-typesafe-api"
     },
     "files": [
         "dist",

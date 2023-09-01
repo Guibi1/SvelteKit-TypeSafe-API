@@ -14,11 +14,7 @@ import { z } from "zod";
 import { createApiObject } from "../fetch.js";
 import { isZodArray, isZodBoolean } from "./helpers.js";
 
-export async function apiValidate<T extends EndpointSchema>(
-    data: Data,
-    schema: T,
-    f?: typeof fetch
-) {
+export async function validate<T extends EndpointSchema>(data: Data, schema: T, f?: typeof fetch) {
     const json = await parseData(data, schema);
     const parse = z.object(schema).safeParse(json);
 
@@ -27,7 +23,7 @@ export async function apiValidate<T extends EndpointSchema>(
             parse.error.issues.some((i) => i.path.length === 1 && i.path.at(0) === "searchParams")
         ) {
             console.error(
-                "The following error might be caused because you you forgot to pass the event url to `apiValidate`."
+                "The following error might be caused because you you forgot to pass the event url to `validate`."
             );
         }
 

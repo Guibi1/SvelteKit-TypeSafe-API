@@ -1,1 +1,1 @@
-export { apiFetch } from "./plugin.js";
+export { typesafeApi } from "./plugin.js";
