@@ -1,6 +1,6 @@
 {
     "name": "sveltekit-typesafe-api",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "author": "Laurent Stéphenne <laurent@guibi.ca>",
     "description": "Adding type safety to SvelteKit's server endpoints and fetches.",
     "keywords": [
